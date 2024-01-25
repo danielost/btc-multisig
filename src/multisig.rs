@@ -3,8 +3,8 @@ use std::{str::FromStr, sync::Arc};
 use bdk::{
     bitcoin::{psbt::PartiallySignedTransaction, Address, PrivateKey},
     database::BatchDatabase,
-    signer::{SignerError, SignerOrdering, SignerWrapper},
-    Error, SignOptions, Wallet,
+    signer::{SignerOrdering, SignerWrapper},
+    SignOptions, Wallet,
 };
 
 pub struct MultisigWallet<D> {
@@ -34,24 +34,18 @@ where
         &mut self,
         recipient_address: &str,
         amount: u64,
-    ) -> Result<PartiallySignedTransaction, Error> {
-        let address = Address::from_str(recipient_address).expect("failed to get address from str");
+    ) -> Result<PartiallySignedTransaction, Box<dyn std::error::Error>> {
+        let address = Address::from_str(recipient_address)?;
         let mut builder = self.multisig_wallet.build_tx();
         builder
             .add_recipient(address.payload.script_pubkey(), amount)
             .enable_rbf();
 
-        let (mut psbt, _) = builder.finish().expect("failed to finish transaction");
+        let (mut psbt, _) = builder.finish()?;
 
-        match self.multisig_wallet.sign(&mut psbt, SignOptions::default()) {
-            Ok(finalized) => {
-                if finalized {
-                    Ok(psbt)
-                } else {
-                    Err(Error::Signer(SignerError::MissingWitnessUtxo))
-                }
-            }
-            Err(e) => Err(e),
-        }
+        self.multisig_wallet
+            .sign(&mut psbt, SignOptions::default())?;
+
+        Ok(psbt)
     }
 }
